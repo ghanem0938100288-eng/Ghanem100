@@ -17,85 +17,64 @@
             display: flex;
             flex-direction: column;
             align-items: center;
-            justify-content: flex-start;
+            justify-content: center;
             overflow: hidden;
             cursor: pointer;
         }
-        /* حاوية العجلة التي تحتوي على صورتك كاملة كخلفية ثابتة وفي منتصفها القرص المتحرك */
         .wheel-container {
             position: relative;
-            width: 85vw;
-            height: 85vw;
-            max-width: 360px;
-            max-height: 360px;
-            margin-top: 6vh;
+            width: 80vw;
+            height: 80vw;
+            max-width: 320px;
+            max-height: 320px;
+            margin-bottom: 20px;
+        }
+        canvas {
+            width: 100%;
+            height: 100%;
             border-radius: 50%;
-            overflow: hidden;
-            box-shadow: 0 0 30px rgba(0, 225, 255, 0.6);
-            border: 4px solid rgba(255, 215, 0, 0.7);
+            box-shadow: 0 0 30px rgba(0, 225, 255, 0.5);
+            border: 5px solid #ffcc00;
         }
-        /* الصورة الكاملة بالخلفية ثابتة لا تدور */
-        .bg-wheel {
+        .pointer {
             position: absolute;
-            top: 0;
-            left: 0;
-            width: 100%;
-            height: 100%;
-            object-fit: cover;
-            z-index: 1;
-        }
-        /* الطبقة أو الجزء الدائري الداخلي للأرقام الذي سيدور فقط عند البدء */
-        .spinning-wheel {
-            position: absolute;
-            top: 0;
-            left: 0;
-            width: 100%;
-            height: 100%;
-            object-fit: cover;
-            z-index: 2;
-            transition: transform 4.5s cubic-bezier(0.15, 0.85, 0.15, 1);
-        }
-        /* لوحة النصوص في الأسفل */
-        .bottom-panel {
-            position: absolute;
-            bottom: 20px;
-            width: 100%;
-            padding: 0 15px;
+            top: -15px;
+            left: 50%;
+            transform: translateX(-50%);
+            width: 0;
+            height: 0;
+            border-left: 12px solid transparent;
+            border-right: 12px solid transparent;
+            border-bottom: 24px solid #ff3366;
             z-index: 10;
         }
         .title-sec {
-            font-size: 21px;
+            font-size: 22px;
             font-weight: 900;
             color: #ffcc00;
             text-shadow: 0 2px 6px rgba(0,0,0,0.9);
-            margin-bottom: 8px;
+            margin-bottom: 10px;
         }
         .status-msg {
             font-size: 15px;
             font-weight: bold;
             color: #ffffff;
             text-shadow: 0 2px 4px rgba(0,0,0,0.9);
+            padding: 0 20px;
             line-height: 1.4;
-            padding: 10px;
-            background: rgba(13, 2, 20, 0.85);
-            border-radius: 12px;
-            border: 1px solid rgba(255, 255, 255, 0.1);
         }
     </style>
 </head>
 <body onclick="startSpin()">
 
+    <div class="title-sec">عجلة الاكوس شي 👑</div>
+
     <div class="wheel-container">
-        <!-- الخلفية الثابتة للصورة -->
-        <img src="Ghan.jpg" class="bg-wheel" alt="خلفية العجلة">
-        <!-- القرص المتحرك للأرقام فقط -->
-        <img id="wheelImg" src="Ghan.jpg" class="spinning-wheel" alt="عجلة الأكوس شي">
+        <div class="pointer"></div>
+        <canvas id="wheelCanvas" width="400" height="400"></canvas>
     </div>
 
-    <div class="bottom-panel">
-        <div class="title-sec">عجلة الاكوس شي 👑</div>
-        <div id="statusMsg" class="status-msg">جاري التحميل...</div>
-    </div>
+    <div id="statusMsg" class="status-msg">اضغط في أي مكان على الشاشة لتدوير العجلة! 🍀</div>
 
     <script>
         const tg = window.Telegram.WebApp;
@@ -107,10 +86,51 @@
         const targetPrize = parseFloat(urlParams.get('prize') || '0');
 
         const statusMsg = document.getElementById('statusMsg');
-        const wheelImg = document.getElementById('wheelImg');
+        const canvas = document.getElementById('wheelCanvas');
+        const ctx = canvas.getContext('2d');
 
-        let currentDegrees = 0;
+        const sectors = [
+            { label: "1000 NSP", color: "#4B0082" },
+            { label: "5000 NSP", color: "#8A2BE2" },
+            { label: "Hard Luck", color: "#483D8B" },
+            { label: "10 NSP", color: "#6A5ACD" },
+            { label: "150 NSP", color: "#7B68EE" },
+            { label: "50 NSP", color: "#9370DB" },
+            { label: "250 NSP", color: "#8B008B" },
+            { label: "100 NSP", color: "#9932CC" },
+            { label: "20 NSP", color: "#BA55D3" },
+            { label: "500 NSP", color: "#DA70D6" }
+        ];
+
+        const arc = Math.PI / (sectors.length / 2);
+        let currentAngle = 0;
         let isSpinning = false;
+
+        function drawSector(sector, i) {
+            const angle = arc * i;
+            ctx.beginPath();
+            ctx.fillStyle = sector.color;
+            ctx.moveTo(200, 200);
+            ctx.arc(200, 200, 200, angle, angle + arc, false);
+            ctx.lineTo(200, 200);
+            ctx.fill();
+            ctx.save();
+
+            ctx.translate(200, 200);
+            ctx.rotate(angle + arc / 2);
+            ctx.textAlign = "right";
+            ctx.fillStyle = "#ffffff";
+            ctx.font = "bold 20px Tahoma";
+            ctx.fillText(sector.label, 180, 10);
+            ctx.restore();
+        }
+
+        function drawWheel() {
+            ctx.clearRect(0, 0, 400, 400);
+            sectors.forEach(drawSector);
+        }
+
+        drawWheel();
 
         if (!canSpin) {
             if (reason === 'used') {
@@ -121,8 +141,6 @@
                 statusMsg.innerText = "لا تتوفر لديك محاولات حالياً.";
             }
             statusMsg.style.color = "#ff6b6b";
-        } else {
-            statusMsg.innerText = "اضغط في أي مكان على الشاشة لتدوير العجلة! 🍀";
         }
 
         function startSpin() {
@@ -131,41 +149,57 @@
             statusMsg.style.color = "#ffffff";
             statusMsg.innerText = "جاري تدوير العجلة... بالتوفيق! 🍀";
 
-            const prizesAngles = {
-                1000: 36,
-                5000: 72,
-                0: 108,    
-                10: 144,
-                150: 180,
-                50: 216,
-                250: 252,
-                100: 288,
-                20: 324,
-                500: 360
+            // حساب الزاوية المطلوبة حسب الجائزة
+            const prizeIndexMap = {
+                1000: 0, 5000: 1, 0: 2, 10: 3, 150: 4,
+                50: 5, 250: 6, 100: 7, 20: 8, 500: 9
             };
+            
+            let index = prizeIndexMap[targetPrize] !== undefined ? prizeIndexMap[targetPrize] : 2;
+            const degreesPerSector = 360 / sectors.length;
+            const targetAngle = 360 - (index * degreesPerSector) - (degreesPerSector / 2);
+            
+            const extraSpins = 360 * 6;
+            const totalDegrees = currentAngle + extraSpins + (targetAngle - (currentAngle % 360));
+            
+            let startTime = null;
+            const duration = 4500;
 
-            let baseAngle = prizesAngles[targetPrize] || 252;
-            const extraSpins = 360 * 6; 
-            currentDegrees += extraSpins + (360 - (currentDegrees % 360)) + baseAngle;
+            function animate(timestamp) {
+                if (!startTime) startTime = timestamp;
+                let progress = (timestamp - startTime) / duration;
+                if (progress > 1) progress = 1;
 
-            wheelImg.style.transform = `rotate(${currentDegrees}deg)`;
+                // Ease out cubic
+                let easeProgress = 1 - Math.pow(1 - progress, 3);
+                let currentDeg = currentAngle + (totalDegrees - currentAngle) * easeProgress;
 
-            setTimeout(() => {
-                if (targetPrize > 0) {
-                    statusMsg.style.color = "#00ffcc";
-                    statusMsg.innerText = `🎉 مبروك! لقد ربحت ${targetPrize} NSP!`;
+                canvas.style.transform = `rotate(${currentDeg}deg)`;
+
+                if (progress < 1) {
+                    requestAnimationFrame(animate);
                 } else {
-                    statusMsg.style.color = "#ff6b6b";
-                    statusMsg.innerText = "😔 حظ أوفر في المرة القادمة (Hard luck)!";
-                }
+                    currentAngle = totalDegrees;
+                    isSpinning = false;
 
-                setTimeout(() => {
-                    tg.sendData(JSON.stringify({
-                        action: "wheel_spun",
-                        prize: targetPrize
-                    }));
-                }, 2000);
-            }, 4600);
+                    if (targetPrize > 0) {
+                        statusMsg.style.color = "#00ffcc";
+                        statusMsg.innerText = `🎉 مبروك! لقد ربحت ${targetPrize} NSP!`;
+                    } else {
+                        statusMsg.style.color = "#ff6b6b";
+                        statusMsg.innerText = "😔 حظ أوفر في المرة القادمة (Hard luck)!";
+                    }
+
+                    setTimeout(() => {
+                        tg.sendData(JSON.stringify({
+                            action: "wheel_spun",
+                            prize: targetPrize
+                        }));
+                    }, 2000);
+                }
+            }
+
+            requestAnimationFrame(animate);
         }
     </script>
 </body>
