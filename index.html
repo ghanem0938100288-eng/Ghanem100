@@ -1,0 +1,247 @@
+<!DOCTYPE html>
+<html lang="ar" dir="rtl">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>عجلة الحظ</title>
+    <script src="https://telegram.org/js/telegram-web-app.js"></script>
+    <style>
+        * { box-sizing: border-box; user-select: none; }
+        body {
+            background: radial-gradient(circle at top, #3b0a45 0%, #160421 60%, #09010e 100%);
+            color: #fff;
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            text-align: center;
+            margin: 0;
+            padding: 15px;
+            min-height: 100vh;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            overflow: hidden;
+        }
+        .header-title {
+            font-size: 28px;
+            font-weight: 900;
+            color: #ffcc00;
+            text-shadow: 0 0 15px rgba(255, 204, 0, 0.7);
+            margin-bottom: 5px;
+        }
+        .wheel-wrapper {
+            position: relative;
+            width: 310px;
+            height: 310px;
+            margin: 20px auto;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+        }
+        .pointer {
+            position: absolute;
+            top: -12px;
+            left: 50%;
+            transform: translateX(-50%);
+            width: 0;
+            height: 0;
+            border-left: 16px solid transparent;
+            border-right: 16px solid transparent;
+            border-top: 32px solid #ff2a5f;
+            filter: drop-shadow(0 4px 6px rgba(0,0,0,0.8));
+            z-index: 10;
+        }
+        canvas {
+            width: 100%;
+            height: 100%;
+            border-radius: 50%;
+            border: 8px solid #d98218;
+            box-shadow: 0 0 25px rgba(217, 130, 24, 0.6), inset 0 0 15px rgba(0,0,0,0.8);
+        }
+        .center-btn {
+            position: absolute;
+            width: 68px;
+            height: 68px;
+            border-radius: 50%;
+            background: radial-gradient(circle, #ffe066 0%, #d98218 80%, #8a4b00 100%);
+            border: 4px solid #fff3b0;
+            color: #3b0a45;
+            font-weight: 900;
+            font-size: 16px;
+            cursor: pointer;
+            box-shadow: 0 0 15px rgba(0,0,0,0.8);
+            z-index: 10;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            transition: transform 0.15s;
+        }
+        .center-btn:active { transform: scale(0.92); }
+        .center-btn.disabled {
+            background: #555;
+            border-color: #888;
+            color: #ccc;
+            cursor: not-allowed;
+        }
+        .status-msg {
+            margin-top: 15px;
+            font-size: 18px;
+            font-weight: bold;
+            color: #ffcc00;
+            text-shadow: 0 2px 4px rgba(0,0,0,0.8);
+            min-height: 50px;
+            padding: 0 10px;
+            line-height: 1.5;
+        }
+    </style>
+</head>
+<body>
+
+    <div class="header-title">عجلة الحظ 🎡</div>
+
+    <div class="wheel-wrapper">
+        <div class="pointer"></div>
+        <canvas id="wheelCanvas" width="400" height="400"></canvas>
+        <button id="spinBtn" class="center-btn" onclick="startSpin()">أدر</button>
+    </div>
+
+    <div id="statusMsg" class="status-msg">اضغط على زر (أدر) في المنتصف لتجربة حظك!</div>
+
+    <script>
+        const tg = window.Telegram.WebApp;
+        tg.expand();
+
+        // قراءة المعطيات المرسلة من البوت عبر الرابط
+        const urlParams = new URLSearchParams(window.location.search);
+        const canSpin = urlParams.get('can_spin') === '1';
+        const reason = urlParams.get('reason') || '';
+        const targetPrize = parseFloat(urlParams.get('prize') || '0');
+
+        const spinBtn = document.getElementById('spinBtn');
+        const statusMsg = document.getElementById('statusMsg');
+
+        // شرائح العجلة المطابقة للتصميم المطلوب
+        const sectors = [
+            { label: "1000 NSP", value: 1000, color: "#9e9e9e", textColor: "#ffffff" },
+            { label: "5000 NSP", value: 5000, color: "#4a0e5c", textColor: "#ffcc00" },
+            { label: "Hard luck", value: 0, color: "#9e9e9e", textColor: "#ffffff" },
+            { label: "10 NSP", value: 10, color: "#4a0e5c", textColor: "#ffffff" },
+            { label: "150 NSP", value: 150, color: "#9e9e9e", textColor: "#ffffff" },
+            { label: "50 NSP", value: 50, color: "#4a0e5c", textColor: "#ffffff" },
+            { label: "250 NSP", value: 250, color: "#9e9e9e", textColor: "#ffffff" },
+            { label: "100 NSP", value: 100, color: "#4a0e5c", textColor: "#ffffff" },
+            { label: "20 NSP", value: 20, color: "#9e9e9e", textColor: "#ffffff" },
+            { label: "500 NSP", value: 500, color: "#4a0e5c", textColor: "#ffffff" }
+        ];
+
+        const canvas = document.getElementById('wheelCanvas');
+        const ctx = canvas.getContext('2d');
+        const center = canvas.width / 2;
+        const arc = (2 * Math.PI) / sectors.length;
+        let currentRotation = 0;
+        let isSpinning = false;
+
+        function drawWheel(rotationAngle) {
+            ctx.clearRect(0, 0, canvas.width, canvas.height);
+            ctx.save();
+            ctx.translate(center, center);
+            ctx.rotate(rotationAngle);
+
+            for (let i = 0; i < sectors.length; i++) {
+                // رسم الشريحة بدءاً من الأعلى (-90 درجة)
+                const startAngle = -Math.PI / 2 + i * arc;
+                const endAngle = startAngle + arc;
+
+                ctx.beginPath();
+                ctx.fillStyle = sectors[i].color;
+                ctx.moveTo(0, 0);
+                ctx.arc(0, 0, center - 5, startAngle, endAngle);
+                ctx.closePath();
+                ctx.fill();
+
+                ctx.lineWidth = 2;
+                ctx.strokeStyle = "#2b0536";
+                ctx.stroke();
+
+                // كتابة النص داخل الشريحة
+                ctx.save();
+                ctx.rotate(startAngle + arc / 2);
+                ctx.textAlign = "right";
+                ctx.fillStyle = sectors[i].textColor;
+                ctx.font = "bold 18px Tahoma";
+                ctx.fillText(sectors[i].label, center - 28, 6);
+                ctx.restore();
+            }
+            ctx.restore();
+        }
+
+        drawWheel(0);
+
+        // التحقق من حالة الأهلية عند فتح الصفحة
+        if (!canSpin) {
+            spinBtn.classList.add('disabled');
+            spinBtn.innerText = "🚫";
+            if (reason === 'used') {
+                statusMsg.innerText = "لقد استنفذت عدد المرات المسموحة لليوم.";
+            } else if (reason === 'no_deposit') {
+                statusMsg.innerText = "ليتم منحك فرصة في عجلة الحظ، يجب أن تقوم بشحن حسابك بالبوت بمبلغ 100 على الأقل.";
+            } else {
+                statusMsg.innerText = "لا تتوفر لديك محاولات حالياً.";
+            }
+        }
+
+        function startSpin() {
+            if (!canSpin || isSpinning) return;
+            isSpinning = true;
+            spinBtn.classList.add('disabled');
+            statusMsg.innerText = "جاري تدوير العجلة... بالتوفيق! 🍀";
+
+            // تحديد الشريحة المستهدفة بناءً على النتيجة المحسوبة في البوت
+            let targetIndex = sectors.findIndex(s => s.value === targetPrize);
+            if (targetIndex === -1) {
+                // إذا كان المبلغ مخصصاً من الآدمن وغير موجود في الشرائح الثابتة، نوقفه على 50 NSP كرمز بصري
+                targetIndex = targetPrize > 0 ? 5 : 2; 
+            }
+
+            // حساب زاوية التوقف الدقيقة تحت المؤشر العلوي
+            const sliceCenterAngle = targetIndex * arc + arc / 2;
+            const stopAngle = (2 * Math.PI) - sliceCenterAngle;
+            const extraSpins = 6 * 2 * Math.PI; // 6 دورات كاملة
+            const totalRotation = extraSpins + stopAngle;
+
+            const duration = 4500;
+            const startTime = performance.now();
+
+            function animate(now) {
+                const elapsed = now - startTime;
+                const progress = Math.min(elapsed / duration, 1);
+                // تباطؤ تدريجي سلس
+                const easeOut = 1 - Math.pow(1 - progress, 4);
+                currentRotation = totalRotation * easeOut;
+
+                drawWheel(currentRotation);
+
+                if (progress < 1) {
+                    requestAnimationFrame(animate);
+                } else {
+                    if (targetPrize > 0) {
+                        statusMsg.style.color = "#00ffcc";
+                        statusMsg.innerText = `🎉 مبروك! لقد ربحت ${targetPrize} NSP!`;
+                    } else {
+                        statusMsg.style.color = "#ff6b6b";
+                        statusMsg.innerText = "😔 حظ أوفر في المرة القادمة (Hard luck)!";
+                    }
+
+                    // إرسال النتيجة للبوت لإضافتها للرصيد وإغلاق النافذة
+                    setTimeout(() => {
+                        tg.sendData(JSON.stringify({
+                            action: "wheel_spun",
+                            prize: targetPrize
+                        }));
+                    }, 2200);
+                }
+            }
+            requestAnimationFrame(animate);
+        }
+    </script>
+</body>
+</html>
