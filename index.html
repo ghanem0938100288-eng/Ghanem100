@@ -8,7 +8,6 @@
     <style>
         * { box-sizing: border-box; user-select: none; }
         body {
-            /* إزالة التعتيم وعرض الخلفية الأصلية بوضوح */
             background: url('Akwas.jpg?v=2') no-repeat center center fixed;
             background-size: cover;
             color: #fff;
@@ -23,18 +22,12 @@
             justify-content: center;
             overflow: hidden;
         }
-        .header-title {
-            font-size: 28px;
-            font-weight: 900;
-            color: #ffcc00;
-            text-shadow: 0 0 15px rgba(255, 204, 0, 0.7);
-            margin-bottom: 5px;
-        }
         .wheel-wrapper {
             position: relative;
             width: 310px;
             height: 310px;
-            margin: 20px auto;
+            /* تم زيادة الهامش العلوي هنا لإنزال العجلة للأسفل (يمكنك تعديل القيمة 40px حسب رغبتك) */
+            margin: 40px auto 20px auto;
             display: flex;
             align-items: center;
             justify-content: center;
@@ -98,11 +91,9 @@
 </head>
 <body>
 
-
     <div class="wheel-wrapper">
         <div class="pointer"></div>
         <canvas id="wheelCanvas" width="400" height="400"></canvas>
-        <!-- تم تعديل النص هنا إلى "ابدأ" -->
         <button id="spinBtn" class="center-btn" onclick="startSpin()">ابدأ</button>
     </div>
 
