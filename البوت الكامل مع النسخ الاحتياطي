@@ -1,0 +1,79 @@
+def _send_backup_email_sync() -> tuple[bool, str]:
+    if not os.path.exists(DB_FILE):
+        return False, "❌ ملف قاعدة البيانات غير موجود حالياً."
+
+    sender = settings.get("backup_sender_email", "").strip()
+    app_password = settings.get("backup_app_password", "").replace(" ", "").strip()
+    receiver = settings.get("backup_receiver_email", "").strip()
+    smtp_server = settings.get("smtp_server", "smtp.gmail.com").strip()
+    smtp_port = int(settings.get("smtp_port", 587))
+
+    if not sender or not app_password or not receiver:
+        return False, "❌ يرجى ضبط البريد المرسل، كلمة مرور التطبيق، والبريد المستقبِل من زر (تعديل النسخ الاحتياطي) أولاً."
+
+    try:
+        now_str = datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+        msg = MIMEMultipart()
+        msg["From"] = sender
+        msg["To"] = receiver
+        msg["Subject"] = f"نسخة احتياطية لقاعدة بيانات البوت - {now_str}"
+
+        body = (
+            f"مرحباً،\n\n"
+            f"مرفق نسخة احتياطية لملف قاعدة البيانات ({DB_FILE})\n"
+            f"تاريخ النسخة: {now_str}\n"
+            f"عدد المستخدمين: {len(users)}"
+        )
+        msg.attach(MIMEText(body, "plain", "utf-8"))
+
+        with open(DB_FILE, "rb") as f:
+            part = MIMEBase("application", "octet-stream")
+            part.set_payload(f.read())
+
+        encoders.encode_base64(part)
+        part.add_header(
+            "Content-Disposition",
+            f'attachment; filename="{os.path.basename(DB_FILE)}"',
+        )
+        msg.attach(part)
+
+        if smtp_port == 465:
+            with smtplib.SMTP_SSL(smtp_server, smtp_port, timeout=20) as server:
+                server.login(sender, app_password)
+                server.send_message(msg)
+        else:
+            try:
+                with smtplib.SMTP(smtp_server, smtp_port, timeout=15) as server:
+                    server.starttls()
+                    server.login(sender, app_password)
+                    server.send_message(msg)
+            except Exception:
+                # محاولة احتياطية عبر منفذ SSL 465 في حال حجب 587
+                with smtplib.SMTP_SSL(smtp_server, 465, timeout=20) as server:
+                    server.login(sender, app_password)
+                    server.send_message(msg)
+
+        return True, f"✅ تم إرسال النسخة الاحتياطية بنجاح إلى:\n{receiver}\n🕒 التاريخ: {now_str}"
+    except Exception as e:
+        logging.error(f"Error sending backup email: {e}")
+        return False, f"❌ تعذر إرسال النسخة الاحتياطية:\n{e}"
+
+
+async def adm_send_backup_now(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    query = update.callback_query
+    await query.answer()
+    if query.from_user.id != SUPER_ADMIN_ID:
+        return
+
+    try:
+        await query.message.delete()
+    except Exception:
+        pass
+
+    wait_msg = await query.message.reply_text("⏳ جاري حفظ البيانات وإرسال النسخة الاحتياطية إلى بريدك الإلكتروني...")
+    _, result_text = await send_backup_email_async()
+    kb = InlineKeyboardMarkup([[InlineKeyboardButton("رجوع ↪️", callback_data='btn_admin_panel')]])
+    try:
+        await wait_msg.edit_text(result_text, reply_markup=kb)
+    except Exception:
+        await query.message.reply_text(result_text, reply_markup=kb)
